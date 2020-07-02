@@ -24,6 +24,18 @@ func (u *UserShortLinkFake) CreateRelation(user entity.User, shortLink entity.Sh
 	return nil
 }
 
+// UpdateRelation updates the short link of a user.
+func (u *UserShortLinkFake) UpdateRelation(user entity.User, oldAlias string, shortLink entity.ShortLink) error {
+	for idx, currUser := range u.users {
+		if currUser.ID == user.ID && u.shortLinks[idx].Alias == oldAlias {
+			u.shortLinks[idx] = shortLink
+			return nil
+		}
+	}
+
+	return ErrEntryNotFound("alias not founded")
+}
+
 // FindAliasesByUser fetches the aliases of all the ShortLinks created by the given user.
 func (u UserShortLinkFake) FindAliasesByUser(user entity.User) ([]string, error) {
 	var aliases []string

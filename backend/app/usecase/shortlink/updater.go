@@ -77,7 +77,13 @@ func (u UpdaterPersist) UpdateShortLink(
 	updateTime := u.timer.Now()
 	shortLink.UpdatedAt = &updateTime
 
-	return u.shortLinkRepo.UpdateShortLink(oldAlias, shortLink)
+	newShortLink, err := u.shortLinkRepo.UpdateShortLink(oldAlias, shortLink)
+	if err != nil {
+		return entity.ShortLink{}, err
+	}
+
+	err = u.userShortLinkRepo.UpdateRelation(user, oldAlias, shortLink)
+	return newShortLink, err
 }
 
 func (u UpdaterPersist) updateAlias(shortLink, update entity.ShortLink) entity.ShortLink {

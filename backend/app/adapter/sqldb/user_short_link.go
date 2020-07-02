@@ -33,6 +33,21 @@ VALUES ($1,$2)
 	return err
 }
 
+// UpdateRelation updates an alias that exists within the user_short_link table.
+func (u UserShortLinkSQL) UpdateRelation(user entity.User, oldAlias string, shortLink entity.ShortLink) error {
+	statement := fmt.Sprintf(`
+UPDATE "%s"
+SET "%s"=$1
+WHERE "%s"=$2;`,
+		table.UserShortLink.TableName,
+		table.UserShortLink.ColumnShortLinkAlias,
+		table.UserShortLink.ColumnShortLinkAlias,
+	)
+
+	_, err := u.db.Exec(statement, shortLink.Alias, oldAlias)
+	return err
+}
+
 // FindAliasesByUser fetches the aliases of all the ShortLinks created by the given user.
 // TODO(issue#260): allow API client to filter urls based on visibility.
 func (u UserShortLinkSQL) FindAliasesByUser(user entity.User) ([]string, error) {

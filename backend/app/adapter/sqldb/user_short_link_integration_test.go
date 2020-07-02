@@ -27,6 +27,91 @@ type userShortLinkTableRow struct {
 	userID string
 }
 
+func TestListShortLinkSql_UpdateRelation(t *testing.T) {
+	now := mustParseTime(t, "2019-05-01T08:02:16Z")
+
+	testCases := []struct {
+		name               string
+		user               entity.User
+		alias              string
+		shortLink          entity.ShortLink
+		userTableRows      []userTableRow
+		shortLinkTableRows []shortLinkTableRow
+		relationTableRows  []userShortLinkTableRow
+		hasErr             bool
+	}{
+		{
+			name:      "alias does not exist",
+			alias:     "abcd-123-xyz",
+			shortLink: entity.ShortLink{},
+			user: entity.User{
+				ID:             "test",
+				Name:           "mockedUser",
+				Email:          "test@example.com",
+				LastSignedInAt: &now,
+				CreatedAt:      &now,
+				UpdatedAt:      &now,
+			},
+			userTableRows:      []userTableRow{},
+			shortLinkTableRows: []shortLinkTableRow{},
+			relationTableRows:  []userShortLinkTableRow{},
+			hasErr:             false,
+		},
+		{
+			name:  "alias exist",
+			alias: "abcd-123-xyz",
+			shortLink: entity.ShortLink{
+				Alias: "abcd",
+			},
+			user: entity.User{
+				ID:             "test",
+				Name:           "mockedUser",
+				Email:          "test@example.com",
+				LastSignedInAt: &now,
+				CreatedAt:      &now,
+				UpdatedAt:      &now,
+			},
+			userTableRows: []userTableRow{
+				{
+					id:    "test",
+					name:  "mockedUser",
+					email: "test@example.com",
+				},
+			},
+			shortLinkTableRows: []shortLinkTableRow{
+				{alias: "abcd-123-xyz"},
+			},
+			relationTableRows: []userShortLinkTableRow{
+				{
+					alias:  "abcd-123-xyz",
+					userID: "test",
+				},
+			},
+			hasErr: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			dbtest.AccessTestDB(
+				dbConnector,
+				dbMigrationTool,
+				dbMigrationRoot,
+				dbConfig,
+				func(sqlDB *sql.DB) {
+					insertUserTableRows(t, sqlDB, testCase.userTableRows)
+					insertShortLinkTableRows(t, sqlDB, testCase.shortLinkTableRows)
+					insertUserShortLinkTableRows(t, sqlDB, testCase.relationTableRows)
+
+					userShortLinkRepo := sqldb.NewUserShortLinkSQL(sqlDB)
+					err := userShortLinkRepo.UpdateRelation(testCase.user, testCase.alias, testCase.shortLink)
+
+					assert.Equal(t, nil, err)
+				})
+		})
+	}
+}
+
 func TestListShortLinkSql_FindAliasesByUser(t *testing.T) {
 	now := mustParseTime(t, "2019-05-01T08:02:16Z")
 
