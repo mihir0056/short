@@ -132,3 +132,260 @@ func TestAuthQuery_ShortLink(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthQuery_ChangeLog(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	testCases := []struct {
+		name              string
+		changeLog         []entity.Change
+		user              entity.User
+		expectedChangeLog ChangeLog
+		expectedErr       error
+	}{
+		{
+			name: "successful query",
+			changeLog: []entity.Change{
+				{
+					ID: "change 1",
+				},
+				{
+					ID: "change 2",
+				},
+			},
+			user: entity.User{ID: "alpha"},
+			expectedChangeLog: newChangeLog([]entity.Change{
+				{
+					ID: "change 1",
+				},
+				{
+					ID: "change 2",
+				},
+			}, nil),
+			expectedErr: nil,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			fakeShortLinkRepo := repository.NewShortLinkFake(map[string]entity.ShortLink{})
+			fakeUserShortLinkRepo := repository.NewUserShortLinkRepoFake(nil, nil)
+			retrieverFake := shortlink.NewRetrieverPersist(&fakeShortLinkRepo, &fakeUserShortLinkRepo)
+
+			keyFetcher := keygen.NewKeyFetcherFake([]keygen.Key{})
+			keyGen, err := keygen.NewKeyGenerator(2, &keyFetcher)
+			assert.Equal(t, nil, err)
+
+			timerFake := timer.NewStub(now)
+			changeLogRepo := repository.NewChangeLogFake(testCase.changeLog)
+			userChangeLogRepo := repository.NewUserChangeLogFake(map[string]time.Time{})
+
+			fakeRolesRepo := repository.NewUserRoleFake(map[string][]role.Role{})
+			rb := rbac.NewRBAC(fakeRolesRepo)
+			au := authorizer.NewAuthorizer(rb)
+
+			changeLogPersist := changelog.NewPersist(keyGen, timerFake, &changeLogRepo, &userChangeLogRepo, au)
+
+			tokenizer := crypto.NewTokenizerFake()
+			auth := authenticator.NewAuthenticator(tokenizer, timerFake, time.Hour)
+
+			authToken, err := auth.GenerateToken(testCase.user)
+			assert.Equal(t, nil, err)
+
+			query := newAuthQuery(&authToken, auth, changeLogPersist, retrieverFake)
+
+			changeLog, err := query.ChangeLog()
+
+			assert.Equal(t, nil, err)
+			assert.Equal(t, testCase.expectedChangeLog, changeLog)
+		})
+	}
+}
+
+func TestAuthQuery_AllChanges(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	testCases := []struct {
+		name              string
+		changeLog         []entity.Change
+		user              entity.User
+		userRoles         map[string][]role.Role
+		expectedChangeLog []Change
+		expectedErr       error
+	}{
+		{
+			name: "successful query",
+			changeLog: []entity.Change{
+				{
+					ID: "change 1",
+				},
+				{
+					ID: "change 2",
+				},
+			},
+			user: entity.User{ID: "alpha"},
+			userRoles: map[string][]role.Role{"alpha": {
+				role.ChangeLogEditor,
+				role.Admin,
+			}},
+			expectedChangeLog: newChangeLog([]entity.Change{
+				{
+					ID: "change 1",
+				},
+				{
+					ID: "change 2",
+				},
+			}, nil).Changes(),
+			expectedErr: nil,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			fakeShortLinkRepo := repository.NewShortLinkFake(map[string]entity.ShortLink{})
+			fakeUserShortLinkRepo := repository.NewUserShortLinkRepoFake(nil, nil)
+			retrieverFake := shortlink.NewRetrieverPersist(&fakeShortLinkRepo, &fakeUserShortLinkRepo)
+
+			keyFetcher := keygen.NewKeyFetcherFake([]keygen.Key{})
+			keyGen, err := keygen.NewKeyGenerator(2, &keyFetcher)
+			assert.Equal(t, nil, err)
+
+			timerFake := timer.NewStub(now)
+			changeLogRepo := repository.NewChangeLogFake(testCase.changeLog)
+			userChangeLogRepo := repository.NewUserChangeLogFake(map[string]time.Time{})
+
+			fakeRolesRepo := repository.NewUserRoleFake(testCase.userRoles)
+			rb := rbac.NewRBAC(fakeRolesRepo)
+			au := authorizer.NewAuthorizer(rb)
+
+			changeLogPersist := changelog.NewPersist(keyGen, timerFake, &changeLogRepo, &userChangeLogRepo, au)
+
+			tokenizer := crypto.NewTokenizerFake()
+			auth := authenticator.NewAuthenticator(tokenizer, timerFake, time.Hour)
+
+			authToken, err := auth.GenerateToken(testCase.user)
+			assert.Equal(t, nil, err)
+
+			query := newAuthQuery(&authToken, auth, changeLogPersist, retrieverFake)
+
+			changeLog, err := query.AllChanges()
+
+			assert.Equal(t, nil, err)
+			assert.Equal(t, testCase.expectedChangeLog, changeLog)
+		})
+	}
+}
+
+func TestAuthQuery_ShortLinks(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	before := now.Add(-5 * time.Second)
+	after := now.Add(5 * time.Second)
+
+	testCases := []struct {
+		name              string
+		user              entity.User
+		alias             string
+		expireAfter       *scalar.Time
+		shortLinks        shortLinkMap
+		hasErr            bool
+		expectedShortLink *ShortLink
+	}{
+		{
+			name:        "alias not found with no expireAfter",
+			alias:       "220uFicCJj",
+			expireAfter: nil,
+			shortLinks:  shortLinkMap{},
+			hasErr:      true,
+		},
+		{
+			name:  "alias not found with expireAfter",
+			alias: "220uFicCJj",
+			expireAfter: &scalar.Time{
+				Time: now,
+			},
+			shortLinks: shortLinkMap{},
+			hasErr:     true,
+		},
+		{
+			name:  "alias expired",
+			alias: "220uFicCJj",
+			expireAfter: &scalar.Time{
+				Time: now,
+			},
+			shortLinks: shortLinkMap{
+				"220uFicCJj": entity.ShortLink{
+					ExpireAt: &before,
+				},
+			},
+			hasErr: true,
+		},
+		{
+			name:  "shortlink found",
+			alias: "220uFicCJj",
+			expireAfter: &scalar.Time{
+				Time: now,
+			},
+			shortLinks: shortLinkMap{
+				"220uFicCJj": entity.ShortLink{
+					ExpireAt: &after,
+				},
+			},
+			hasErr: false,
+			expectedShortLink: &ShortLink{
+				shortLink: entity.ShortLink{
+					ExpireAt: &after,
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			fakeShortLinkRepo := repository.NewShortLinkFake(testCase.shortLinks)
+			fakeUserShortLinkRepo := repository.NewUserShortLinkRepoFake(nil, nil)
+			retrieverFake := shortlink.NewRetrieverPersist(&fakeShortLinkRepo, &fakeUserShortLinkRepo)
+
+			keyFetcher := keygen.NewKeyFetcherFake([]keygen.Key{})
+			keyGen, err := keygen.NewKeyGenerator(2, &keyFetcher)
+			assert.Equal(t, nil, err)
+
+			timerFake := timer.NewStub(now)
+			changeLogRepo := repository.NewChangeLogFake([]entity.Change{})
+			userChangeLogRepo := repository.NewUserChangeLogFake(map[string]time.Time{})
+
+			fakeRolesRepo := repository.NewUserRoleFake(map[string][]role.Role{})
+			rb := rbac.NewRBAC(fakeRolesRepo)
+			au := authorizer.NewAuthorizer(rb)
+
+			changeLog := changelog.NewPersist(keyGen, timerFake, &changeLogRepo, &userChangeLogRepo, au)
+
+			tokenizer := crypto.NewTokenizerFake()
+			auth := authenticator.NewAuthenticator(tokenizer, timerFake, time.Hour)
+
+			authToken, err := auth.GenerateToken(testCase.user)
+			assert.Equal(t, nil, err)
+
+			query := newAuthQuery(&authToken, auth, changeLog, retrieverFake)
+
+			shortLinkArgs := &ShortLinkArgs{
+				Alias:       testCase.alias,
+				ExpireAfter: testCase.expireAfter,
+			}
+
+			s, err := query.ShortLink(shortLinkArgs)
+
+			if testCase.hasErr {
+				assert.NotEqual(t, nil, err)
+				return
+			}
+			assert.Equal(t, testCase.expectedShortLink, s)
+		})
+	}
+}
