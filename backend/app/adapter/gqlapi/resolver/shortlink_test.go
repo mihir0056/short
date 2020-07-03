@@ -13,7 +13,7 @@ import (
 
 func TestShortLink_Alias(t *testing.T) {
 	t.Parallel()
-	shortLinkResolver := ShortLink{shortLink: entity.ShortLink{Alias: "TestAlias"}}
+	shortLinkResolver := newShortLink(entity.ShortLink{Alias: "TestAlias"})
 
 	expected := shortLinkResolver.shortLink.Alias
 	got := *shortLinkResolver.Alias()
@@ -22,7 +22,7 @@ func TestShortLink_Alias(t *testing.T) {
 
 func TestShortLink_LongLink(t *testing.T) {
 	t.Parallel()
-	shortLinkResolver := ShortLink{shortLink: entity.ShortLink{LongLink: "TestLongLink"}}
+	shortLinkResolver := newShortLink(entity.ShortLink{LongLink: "TestLongLink"})
 
 	expected := shortLinkResolver.shortLink.LongLink
 	got := *shortLinkResolver.LongLink()
@@ -33,19 +33,20 @@ func TestShortLink_ExpireAt(t *testing.T) {
 	t.Parallel()
 	timeAfter := time.Now().Add(5 * time.Second)
 	testCases := []struct {
-		shortLink ShortLink
+		shortLink entity.ShortLink
 		expected  *scalar.Time
 	}{
 		{
-			shortLink: ShortLink{shortLink: entity.ShortLink{ExpireAt: &timeAfter}},
+			shortLink: entity.ShortLink{ExpireAt: &timeAfter},
 			expected:  &scalar.Time{Time: timeAfter},
 		},
 		{
-			shortLink: ShortLink{shortLink: entity.ShortLink{ExpireAt: nil}},
+			shortLink: entity.ShortLink{ExpireAt: nil},
 		},
 	}
 	for _, testCase := range testCases {
 		testCase := testCase
-		assert.Equal(t, testCase.expected, testCase.shortLink.ExpireAt())
+		shortLink := newShortLink(testCase.shortLink)
+		assert.Equal(t, testCase.expected, shortLink.ExpireAt())
 	}
 }
