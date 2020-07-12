@@ -189,19 +189,6 @@ steps:
       event:
         - push
 
-  - name: build testing frontend Docker image
-    image: docker
-    commands:
-      - docker build -t short-frontend-testing:latest -f frontend/Dockerfile frontend
-    volumes:
-      - name: docker
-        path: /var/run/docker.sock
-    when:
-      branch:
-        - testing
-      event:
-        - push
-
   - name: build staging frontend Docker image
     image: docker
     commands:
