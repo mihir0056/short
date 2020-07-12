@@ -176,6 +176,8 @@ steps:
   - name: create story assets
     image: node:12.7.0-alpine
     volumes:
+      - name: frontend-dep
+        path: /drone/src/frontend/node_modules
       - name: story-dep
         path: /drone/src/story/node_modules
     commands:
