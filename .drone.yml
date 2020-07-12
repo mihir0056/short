@@ -180,7 +180,9 @@ steps:
         path: /drone/src/story/node_modules
     commands:
       - apk add --no-cache bash git
-      - cd story
+      - cd frontend
+      - yarn
+      - cd ../story
       - yarn
       - CI=true yarn build
     when:
